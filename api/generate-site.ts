@@ -1,55 +1,59 @@
-import { NextResponse } from "next/server";
+// Vercel serverless function (no Next.js imports!)
 
-export const runtime = "edge"; // Sneller en goedkoper op Vercel
+export const config = {
+  runtime: 'edge', // zorgt dat 'process/env' werkt
+};
 
-export async function POST(req: Request) {
+export default async function handler(req: Request) {
   try {
-    // 1. Ontvang prompt uit Base44
-    const { prompt } = await req.json();
+    const body = await req.json();
+    const prompt = body.prompt;
 
     if (!prompt) {
-      return NextResponse.json(
-        { error: "No prompt provided" },
+      return new Response(
+        JSON.stringify({ error: "Missing prompt" }),
         { status: 400 }
       );
     }
 
-    // 2. Roep OpenAI API aan
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-    });
+    const apiKey = process.env.OPENAI_API_KEY;
 
-    const data = await openaiResponse.json();
-
-    if (!data.choices || !data.choices[0]) {
-      return NextResponse.json(
-        { error: "Invalid OpenAI response", details: data },
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "Missing API key" }),
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      result: data.choices[0].message?.content || "",
-    });
-  } catch (err: any) {
-    return NextResponse.json(
+    // OPENAI CALL
+    const response = await fetch(
+      "https://api.openai.com/v1/responses",
       {
-        error: "Server error",
-        details: err?.message || err.toString(),
-      },
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          input: prompt
+        })
+      }
+    );
+
+    const json = await response.json();
+
+    return new Response(JSON.stringify(json), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        error: "Server crash",
+        details: String(err)
+      }),
       { status: 500 }
     );
   }
